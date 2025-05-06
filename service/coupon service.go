@@ -3,22 +3,24 @@ package service
 import (
 	"context"
 	"errors"
+	"log"
 
+	redisProvider "github.com/Puneet-Vishnoi/Coupon-System/cache/redis/providers"
 	"github.com/Puneet-Vishnoi/Coupon-System/models"
 	"github.com/Puneet-Vishnoi/Coupon-System/repository"
 )
 
 type CouponService struct {
-	Repo repository.CouponRepository
+	Repo *repository.CouponRepository
 }
 
-func NewCouponService(repo repository.CouponRepository) *CouponService {
+func NewCouponService(repo *repository.CouponRepository, redis *redisProvider.RedisHelper) *CouponService {
 	return &CouponService{Repo: repo}
 }
 
 func (s *CouponService) CreateCoupon(ctx context.Context, coupon *models.Coupon) error {
-	// Basic validation can be added here
-	return s.Repo.CreateCoupon(context.Background(), coupon)
+	log.Println(coupon, "kkkkk")
+	return s.Repo.CreateCoupon(ctx, coupon) 
 }
 
 func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.ApplicableCouponsRequest) ([]models.Coupon, error) {
@@ -26,9 +28,15 @@ func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.App
 	if err != nil {
 		return nil, err
 	}
+	log.Println(allCoupons, "all")
+	log.Println(req, "req")
+
 
 	var applicable []models.Coupon
 	for _, c := range allCoupons {
+		log.Println(c.ApplicableCategories, "acata")
+		log.Println(c.ApplicableMedicineIDs, "amedi")
+
 		if req.OrderTotal < c.MinOrderValue {
 			continue
 		}
@@ -38,7 +46,11 @@ func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.App
 			continue
 		}
 
+		
+
 		for _, item := range req.CartItems {
+			log.Println(item)
+
 			if contains(c.ApplicableMedicineIDs, item.ID) || contains(c.ApplicableCategories, item.Category) {
 				applicable = append(applicable, c)
 				break

@@ -2,7 +2,7 @@ package constants
 
 const (
 	APIVersion = "v1"
-	MAX_DB_ATTEMPTS = 5
+	MAX_DB_ATTEMPTS = 1
 
 	BadRequestMessage = "request not fulfilled"
 

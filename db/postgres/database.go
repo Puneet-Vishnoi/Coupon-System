@@ -14,7 +14,7 @@ type Db struct {
 
 // ConnectDB establishes a connection to the PostgreSQL database
 func ConnectDB() *Db {
-	connStr := "host=localhost port=5432 user=postgres password=Puneet dbname=food-delivery-backend sslmode=disable"
+	connStr := "host=localhost port=5432 user=postgres password=Puneet dbname=coupon-system sslmode=disable"
 
 	// Open the database connection
 	db, err := sql.Open("postgres", connStr)
@@ -50,4 +50,44 @@ func (db *Db) Stop() {
 			fmt.Println("PostgreSQL connection closed successfully!")
 		}
 	}
+}
+
+
+// InitSchema creates the necessary tables in the PostgreSQL database
+func (db *Db) InitSchema() error {
+	schema := `
+	DROP TABLE IF EXISTS coupon_usages;
+	DROP TABLE IF EXISTS coupons;
+
+	CREATE TABLE coupons (
+		coupon_code TEXT PRIMARY KEY,
+		expiry_date TIMESTAMPTZ,
+		usage_type TEXT,
+		applicable_medicine_ids JSONB,
+		applicable_categories JSONB,
+		min_order_value DOUBLE PRECISION,
+		valid_start TIMESTAMPTZ,
+		valid_end TIMESTAMPTZ,
+		terms_and_conditions TEXT,
+		discount_type TEXT,
+		discount_value DOUBLE PRECISION,
+		max_usage_per_user INTEGER,
+		discount_target TEXT,
+		max_discount_amount DOUBLE PRECISION
+	);
+
+	CREATE TABLE coupon_usages (
+		id SERIAL PRIMARY KEY,
+		user_id TEXT,
+		coupon_code TEXT REFERENCES coupons(coupon_code) ON DELETE CASCADE,
+		used_at TIMESTAMPTZ DEFAULT NOW()
+	);`
+
+	_, err := db.PostgresClient.Exec(schema)
+	if err != nil {
+		return fmt.Errorf("failed to create schema: %w", err)
+	}
+
+	fmt.Println("Database schema initialized successfully.")
+	return nil
 }

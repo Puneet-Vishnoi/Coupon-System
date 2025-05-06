@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -10,10 +11,10 @@ import (
 )
 
 type CouponHandler struct {
-	Service service.CouponService
+	Service *service.CouponService
 }
 
-func NewCouponHandler(s service.CouponService) *CouponHandler {
+func NewCouponHandler(s *service.CouponService) *CouponHandler {
 	return &CouponHandler{Service: s}
 }
 
@@ -25,10 +26,15 @@ func (h *CouponHandler) CreateCoupon(c *gin.Context) {
 		return
 	}
 
+	log.Println(req, "asdfghjkl")
+
 	if err := h.Service.CreateCoupon(c.Request.Context(), &req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.Println(req, "here")
+
 
 	c.JSON(http.StatusCreated, gin.H{"message": "Coupon created successfully"})
 }
@@ -40,10 +46,13 @@ func (h *CouponHandler) GetApplicableCoupons(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
+	log.Println(req, "here")
 
 	if req.Timestamp.IsZero() {
 		req.Timestamp = time.Now()
 	}
+	log.Println(req, "here")
+
 
 	coupons, err := h.Service.GetApplicableCoupons(c.Request.Context(), req)
 	if err != nil {
@@ -53,7 +62,6 @@ func (h *CouponHandler) GetApplicableCoupons(c *gin.Context) {
 
 	c.JSON(http.StatusOK, coupons)
 }
-
 
 // POST /coupons/validate
 func (h *CouponHandler) ValidateCoupon(c *gin.Context) {

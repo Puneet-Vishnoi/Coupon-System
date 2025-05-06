@@ -4,18 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
+	"github.com/Puneet-Vishnoi/Coupon-System/db/postgres/providers"
 	"github.com/Puneet-Vishnoi/Coupon-System/models"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type CouponRepository struct {
-	db *pgxpool.Pool
+	DBHelper *providers.DBHelper
 }
 
-func NewCouponRepository(db *pgxpool.Pool) *CouponRepository {
-	return &CouponRepository{db: db}
+func NewCouponRepository(db *providers.DBHelper) *CouponRepository {
+	return &CouponRepository{DBHelper: db}
 }
 
 func (r *CouponRepository) CreateCoupon(ctx context.Context, c *models.Coupon) error {
@@ -29,7 +30,9 @@ func (r *CouponRepository) CreateCoupon(ctx context.Context, c *models.Coupon) e
 		return fmt.Errorf("failed to marshal categories: %w", err)
 	}
 
-	_, err = r.db.Exec(ctx, `
+	log.Println(c)
+
+	_, err = r.DBHelper.PostgresClient.ExecContext(ctx, `
         INSERT INTO coupons (
             coupon_code, expiry_date, usage_type, 
             applicable_medicine_ids, applicable_categories, 
@@ -37,25 +40,22 @@ func (r *CouponRepository) CreateCoupon(ctx context.Context, c *models.Coupon) e
             terms_and_conditions, discount_type, discount_value, 
             max_usage_per_user, discount_target, max_discount_amount
         ) VALUES (
-            $1, $2, $3, 
-            $4, $5, 
-            $6, $7, $8, 
-            $9, $10, $11, 
-            $12, $13, $14
+            $1, $2, $3, $4, $5, 
+            $6, $7, $8, $9, $10, 
+            $11, $12, $13, $14
         )
-    `,
-		c.CouponCode, c.ExpiryDate, c.UsageType,
+    `, c.CouponCode, c.ExpiryDate, c.UsageType,
 		meds, cats,
 		c.MinOrderValue, c.ValidTimeWindow.Start, c.ValidTimeWindow.End,
 		c.TermsAndConditions, c.DiscountType, c.DiscountValue,
 		c.MaxUsagePerUser, c.DiscountTarget, c.MaxDiscountAmount,
 	)
-
+	log.Println(err)
 	return err
 }
 
 func (r *CouponRepository) GetAllCoupons(ctx context.Context) ([]*models.Coupon, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.DBHelper.PostgresClient.QueryContext(ctx, `
         SELECT 
             coupon_code, expiry_date, usage_type, 
             applicable_medicine_ids, applicable_categories, 
@@ -95,7 +95,6 @@ func (r *CouponRepository) GetAllCoupons(ctx context.Context) ([]*models.Coupon,
 
 		coupons = append(coupons, &c)
 	}
-
 	return coupons, nil
 }
 
@@ -103,7 +102,7 @@ func (r *CouponRepository) GetCouponByCode(ctx context.Context, code string) (mo
 	var c models.Coupon
 	var meds, cats []byte
 
-	err := r.db.QueryRow(ctx, `
+	err := r.DBHelper.PostgresClient.QueryRowContext(ctx, `
         SELECT 
             coupon_code, expiry_date, usage_type, 
             applicable_medicine_ids, applicable_categories, 
@@ -135,7 +134,7 @@ func (r *CouponRepository) GetCouponByCode(ctx context.Context, code string) (mo
 
 func (r *CouponRepository) GetUserUsageCount(ctx context.Context, userID, couponCode string) (int, error) {
 	var count int
-	err := r.db.QueryRow(ctx, `
+	err := r.DBHelper.PostgresClient.QueryRowContext(ctx, `
         SELECT COUNT(*) FROM coupon_usages
         WHERE user_id = $1 AND coupon_code = $2
     `, userID, couponCode).Scan(&count)
@@ -143,7 +142,7 @@ func (r *CouponRepository) GetUserUsageCount(ctx context.Context, userID, coupon
 }
 
 func (r *CouponRepository) RecordUsage(ctx context.Context, userID, couponCode string, usedAt time.Time) error {
-	_, err := r.db.Exec(ctx, `
+	_, err := r.DBHelper.PostgresClient.ExecContext(ctx, `
         INSERT INTO coupon_usages (user_id, coupon_code, used_at)
         VALUES ($1, $2, $3)
     `, userID, couponCode, usedAt)
@@ -151,7 +150,7 @@ func (r *CouponRepository) RecordUsage(ctx context.Context, userID, couponCode s
 }
 
 func (r *CouponRepository) GetValidCoupons(ctx context.Context, currentTime time.Time) ([]models.Coupon, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.DBHelper.PostgresClient.QueryContext(ctx, `
         SELECT 
             coupon_code, expiry_date, usage_type, 
             applicable_medicine_ids, applicable_categories, 
