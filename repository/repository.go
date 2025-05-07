@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/Puneet-Vishnoi/Coupon-System/db/postgres/providers"
@@ -31,28 +30,34 @@ func (r *CouponRepository) CreateCoupon(ctx context.Context, c *models.Coupon) e
 		return fmt.Errorf("failed to marshal categories: %w", err)
 	}
 
-	log.Println(c)
-
 	_, err = r.DBHelper.PostgresClient.ExecContext(ctx, `
-        INSERT INTO coupons (
-            coupon_code, expiry_date, usage_type, 
-            applicable_medicine_ids, applicable_categories, 
-            min_order_value, valid_start, valid_end, 
-            terms_and_conditions, discount_type, discount_value, 
-            max_usage_per_user, discount_target, max_discount_amount
-        ) VALUES (
-            $1, $2, $3, $4, $5, 
-            $6, $7, $8, $9, $10, 
-            $11, $12, $13, $14
-        )
-    `, c.CouponCode, c.ExpiryDate, c.UsageType,
-		meds, cats,
-		c.MinOrderValue, c.ValidTimeWindow.Start, c.ValidTimeWindow.End,
-		c.TermsAndConditions, c.DiscountType, c.DiscountValue,
-		c.MaxUsagePerUser, c.DiscountTarget, c.MaxDiscountAmount,
+		INSERT INTO coupons (
+			coupon_code,
+			discount_type,
+			discount_value,
+			discount_target,
+			min_order_value,
+			max_usage_per_user,
+			expiry_date,
+			applicable_medicine_ids,
+			applicable_categories
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`,
+		c.CouponCode,
+		c.DiscountType,
+		c.DiscountValue,
+		c.DiscountTarget,
+		c.MinOrderValue,
+		c.MaxUsagePerUser,
+		c.ExpiryDate,
+		meds,
+		cats,
 	)
-	log.Println(err)
-	return err
+
+	if err != nil {
+		return fmt.Errorf("failed to insert coupon: %w", err)
+	}
+	return nil
 }
 
 func (r *CouponRepository) GetAllCoupons(ctx context.Context) ([]*models.Coupon, error) {
@@ -133,7 +138,7 @@ func (r *CouponRepository) GetCouponByCode(ctx context.Context, code string) (mo
 	return c, nil
 }
 
-func (r *CouponRepository) GetUserUsageCount(ctx context.Context,  tx *sql.Tx, userID, couponCode string) (int, error) {
+func (r *CouponRepository) GetUserUsageCount(ctx context.Context, tx *sql.Tx, userID, couponCode string) (int, error) {
 	var count int
 	err := tx.QueryRowContext(ctx, `
         SELECT COUNT(*) FROM coupon_usages
