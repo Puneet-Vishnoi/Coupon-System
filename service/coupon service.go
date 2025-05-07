@@ -55,26 +55,30 @@ func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.App
 }
 
 func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateCouponRequest) (models.ValidateCouponResponse, error) {
+	// Start a new transaction
 	tx, err := s.Repo.DBHelper.PostgresClient.BeginTx(ctx, nil)
 	if err != nil {
 		return models.ValidateCouponResponse{}, errors.New("failed to start transaction")
 	}
 	defer tx.Rollback()
 
-	// coupon, err := s.Repo.GetCouponByCode(ctx, req.CouponCode)
-	// if err != nil {
-	// 	return models.ValidateCouponResponse{}, errors.New("coupon not found")
-	// }
-
+	// Fetch the coupon from cache or DB
 	coupon, err := s.fetchCouponFromCacheOrDB(ctx, req.CouponCode)
 	if err != nil {
 		return models.ValidateCouponResponse{}, err
 	}
 
+	// Check if the coupon is expired
 	if req.Timestamp.After(coupon.ExpiryDate) {
 		return models.ValidateCouponResponse{}, errors.New("coupon expired")
 	}
 
+	// Validate the coupon's time window
+	if req.Timestamp.Before(coupon.ValidTimeWindow.Start) || req.Timestamp.After(coupon.ValidTimeWindow.End) {
+		return models.ValidateCouponResponse{}, errors.New("coupon not valid at this time")
+	}
+
+	// Check if the user has exceeded the usage limit
 	usageCount, err := s.Repo.GetUserUsageCount(ctx, tx, req.UserID, req.CouponCode)
 	if err != nil {
 		return models.ValidateCouponResponse{}, err
@@ -83,6 +87,7 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 		return models.ValidateCouponResponse{}, errors.New("usage limit reached")
 	}
 
+	// Validate if the coupon is applicable for the cart items (medicine/category check)
 	applicable := false
 	for _, item := range req.CartItems {
 		if contains(coupon.ApplicableMedicineIDs, item.ID) || contains(coupon.ApplicableCategories, item.Category) {
@@ -94,27 +99,33 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 		return models.ValidateCouponResponse{}, errors.New("coupon not applicable to cart items")
 	}
 
+	// Validate that the order total meets the minimum order value
 	if req.OrderTotal < coupon.MinOrderValue {
 		return models.ValidateCouponResponse{}, errors.New("order total does not meet minimum requirement")
 	}
 
+	// Calculate the discount
 	discount := calculateDiscount(coupon, req.OrderTotal)
 
+	// Record the coupon usage for the user
 	err = s.Repo.RecordUsage(ctx, tx, req.UserID, coupon.CouponCode, req.Timestamp)
 	if err != nil {
 		return models.ValidateCouponResponse{}, err
 	}
 
+	// Commit the transaction
 	if err := tx.Commit(); err != nil {
 		return models.ValidateCouponResponse{}, errors.New("failed to commit transaction")
 	}
 
+	// Return the valid response with the calculated discount
 	return models.ValidateCouponResponse{
 		IsValid:  true,
 		Discount: discount,
 		Message:  "coupon applied successfully",
 	}, nil
 }
+
 
 func (s *CouponService) fetchCouponFromCacheOrDB(ctx context.Context, couponCode string) (models.Coupon, error) {
 	var coupon models.Coupon
