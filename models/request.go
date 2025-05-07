@@ -17,7 +17,7 @@ type ValidateCouponRequest struct {
 }
 
 type CartItem struct {
-	ID       string  `json:"id"`       // Medicine ID
+	ID       string  `json:"medicine_id"`       // Medicine ID
 	Category string  `json:"category"` // e.g., "painkillers", "diabetes"
 	Price    float64 `json:"price"`
 }

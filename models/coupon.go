@@ -19,6 +19,6 @@ type Coupon struct {
 }
 
 type TimeWindow struct {
-	Start time.Time `json:"start"`
-	End   time.Time `json:"end"`
+	Start time.Time `json:"valid_start"`
+	End   time.Time `json:"valid_end"`
 }

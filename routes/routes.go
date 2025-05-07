@@ -12,7 +12,7 @@ func RegisterRoutes(router *gin.Engine, service *service.CouponService) {
 	api := router.Group("/api")
 	{
 		api.POST("/coupons", couponHandler.CreateCoupon)
-		api.GET("/coupons/applicable", couponHandler.GetApplicableCoupons)
+		api.POST("/coupons/applicable", couponHandler.GetApplicableCoupons)
 		api.POST("/coupons/validate", couponHandler.ValidateCoupon)
 	}
 }

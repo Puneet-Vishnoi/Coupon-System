@@ -3,13 +3,14 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/Puneet-Vishnoi/Coupon-System/models"
 	"github.com/Puneet-Vishnoi/Coupon-System/tests/mockdb"
-	"github.com/go-playground/assert/v2"
+	"github.com/go-playground/assert"
 )
 
 func TestCouponIntegration(t *testing.T) {
@@ -43,7 +44,8 @@ func TestCouponIntegration(t *testing.T) {
 	}
 
 	resp, err := http.Post("http://localhost:8080/api/coupons", "application/json", bytes.NewBuffer(couponJSON))
-	if err != nil || resp.StatusCode != http.StatusOK {
+	if err != nil || resp.StatusCode != http.StatusCreated {
+		log.Println(err, resp, "//nmnm")
 		t.Fatalf("failed to create coupon: %v", err)
 	}
 	defer resp.Body.Close()
@@ -67,6 +69,7 @@ func TestCouponIntegration(t *testing.T) {
 
 	resp, err = http.Post("http://localhost:8080/api/coupons/applicable", "application/json", bytes.NewBuffer(applicableJSON))
 	if err != nil || resp.StatusCode != http.StatusOK {
+		log.Println(resp, err)
 		t.Fatalf("failed to check if coupon is applicable: %v", err)
 	}
 	defer resp.Body.Close()
@@ -87,6 +90,7 @@ func TestCouponIntegration(t *testing.T) {
 
 	resp, err = http.Post("http://localhost:8080/api/coupons/validate", "application/json", bytes.NewBuffer(validateJSON))
 	if err != nil || resp.StatusCode != http.StatusOK {
+		log.Println(resp, err)
 		t.Fatalf("failed to validate coupon: %v", err)
 	}
 	defer resp.Body.Close()
@@ -97,6 +101,8 @@ func TestCouponIntegration(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
+	log.Println(result)
+
 	assert.Equal(t, result.IsValid, true)
-	assert.Equal(t, result.Discount, 24.1) 
+	assert.Equal(t, result.Discount["total_order_value"], 24.1)
 }

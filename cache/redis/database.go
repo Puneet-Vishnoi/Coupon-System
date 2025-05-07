@@ -46,8 +46,18 @@ func ConnectRedis() *RedisDb {
 }
 
 func (db *RedisDb) Stop() {
-	err := db.RedisClient.Close()
-	if err != nil {
+	if db.RedisClient == nil {
+		log.Println("Redis client is nil, skipping stop.")
+		return
+	}
+
+	ctx := context.Background()
+
+	if err := db.RedisClient.FlushAll(ctx).Err(); err != nil && err != redis.ErrClosed {
+		log.Printf("Failed to flush Redis: %v", err)
+	}
+
+	if err := db.RedisClient.Close(); err != nil && err != redis.ErrClosed {
 		log.Printf("Error closing Redis connection: %v", err)
 	} else {
 		log.Print("Redis connection closed successfully")

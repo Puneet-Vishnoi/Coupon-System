@@ -60,13 +60,18 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 	if err != nil {
 		return models.ValidateCouponResponse{}, errors.New("failed to start transaction")
 	}
-	defer tx.Rollback()
-
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
 	// Fetch the coupon from cache or DB
 	coupon, err := s.fetchCouponFromCacheOrDB(ctx, req.CouponCode)
 	if err != nil {
 		return models.ValidateCouponResponse{}, err
 	}
+
+	log.Println(coupon, "cpn", 	req.Timestamp.Before(coupon.ValidTimeWindow.Start) || req.Timestamp.After(coupon.ValidTimeWindow.End))
 
 	// Check if the coupon is expired
 	if req.Timestamp.After(coupon.ExpiryDate) {
@@ -87,6 +92,9 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 		return models.ValidateCouponResponse{}, errors.New("usage limit reached")
 	}
 
+	log.Println(req.OrderTotal , coupon.MinOrderValue, req.OrderTotal < coupon.MinOrderValue, coupon, "//xzmmxclc")
+
+
 	// Validate if the coupon is applicable for the cart items (medicine/category check)
 	applicable := false
 	for _, item := range req.CartItems {
@@ -98,7 +106,7 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 	if !applicable {
 		return models.ValidateCouponResponse{}, errors.New("coupon not applicable to cart items")
 	}
-
+	log.Println(req.OrderTotal , coupon.MinOrderValue, req.OrderTotal < coupon.MinOrderValue)
 	// Validate that the order total meets the minimum order value
 	if req.OrderTotal < coupon.MinOrderValue {
 		return models.ValidateCouponResponse{}, errors.New("order total does not meet minimum requirement")

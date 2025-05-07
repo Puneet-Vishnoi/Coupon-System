@@ -16,22 +16,19 @@ type Db struct {
 func ConnectDB() *Db {
 	connStr := "host=localhost port=5432 user=postgres password=Puneet dbname=coupon-system sslmode=disable"
 
-	// Open the database connection
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatalf("Failed to open database connection: %v", err)
 	}
 
-	// Test the database connection
 	err = db.Ping()
 	if err != nil {
 		log.Fatalf("Failed to connect to PostgreSQL database: %v", err)
 	}
 
-	// Configure the connection pool
-	db.SetMaxOpenConns(25)   // Maximum number of open connections
-	db.SetMaxIdleConns(5)    // Maximum number of idle connections
-	db.SetConnMaxLifetime(0) // Unlimited connection lifetime
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(0)
 
 	fmt.Println("Connected to PostgreSQL database successfully!")
 
@@ -52,7 +49,6 @@ func (db *Db) Stop() {
 	}
 }
 
-
 // InitSchema creates the necessary tables in the PostgreSQL database
 func (db *Db) InitSchema() error {
 	schema := `
@@ -61,25 +57,25 @@ func (db *Db) InitSchema() error {
 
 	CREATE TABLE coupons (
 		coupon_code TEXT PRIMARY KEY,
-		expiry_date TIMESTAMPTZ,
-		usage_type TEXT,
-		applicable_medicine_ids JSONB,
-		applicable_categories JSONB,
-		min_order_value DOUBLE PRECISION,
-		valid_start TIMESTAMPTZ,
-		valid_end TIMESTAMPTZ,
-		terms_and_conditions TEXT,
-		discount_type TEXT,
-		discount_value DOUBLE PRECISION,
-		max_usage_per_user INTEGER,
-		discount_target TEXT,
-		max_discount_amount DOUBLE PRECISION
+		expiry_date TIMESTAMPTZ NOT NULL,
+		usage_type TEXT NOT NULL DEFAULT 'single_use' CHECK (usage_type IN ('single_use', 'multi_use')),
+		applicable_medicine_ids JSONB NOT NULL DEFAULT '[]',
+		applicable_categories JSONB NOT NULL DEFAULT '[]',
+		min_order_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+		valid_start TIMESTAMPTZ NOT NULL,
+		valid_end TIMESTAMPTZ NOT NULL,
+		terms_and_conditions TEXT NOT NULL DEFAULT '',
+		discount_type TEXT NOT NULL DEFAULT 'flat' CHECK (discount_type IN ('flat', 'percentage')),
+		discount_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+		max_usage_per_user INTEGER NOT NULL DEFAULT 1,
+		discount_target TEXT NOT NULL DEFAULT 'total_order_value' CHECK (discount_target IN ('medicine', 'delivery', 'total_order_value')),
+		max_discount_amount DOUBLE PRECISION NOT NULL DEFAULT 0
 	);
 
 	CREATE TABLE coupon_usages (
 		id SERIAL PRIMARY KEY,
-		user_id TEXT,
-		coupon_code TEXT REFERENCES coupons(coupon_code) ON DELETE CASCADE,
+		user_id TEXT NOT NULL,
+		coupon_code TEXT NOT NULL REFERENCES coupons(coupon_code) ON DELETE CASCADE,
 		used_at TIMESTAMPTZ DEFAULT NOW()
 	);`
 

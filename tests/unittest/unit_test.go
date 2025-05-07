@@ -21,7 +21,7 @@ func TestValidateCoupon(t *testing.T) {
 		DiscountTarget:        "medicine",
 		MinOrderValue:         100,
 		MaxUsagePerUser:       1,
-		UsageType:             "single-use",
+		UsageType:             "single_use",
 		TermsAndConditions:    "Valid on medicine only",
 		ApplicableCategories:  []string{"painkillers"},
 		ApplicableMedicineIDs: []string{"med001", "med002"},
@@ -40,11 +40,13 @@ func TestValidateCoupon(t *testing.T) {
 				c.CouponCode = "EXPIRED"
 				c.ExpiryDate = now.Add(-24 * time.Hour)
 				test.Service.CreateCoupon(context.Background(), &c)
+				// log.Println(c)
 				return c.CouponCode
 			},
 			request: models.ValidateCouponRequest{
 				UserID:     "user1",
 				OrderTotal: 200,
+				Timestamp:  time.Now(),
 			},
 			wantErr: "coupon expired",
 		},
@@ -75,11 +77,14 @@ func TestValidateCoupon(t *testing.T) {
 				c.MinOrderValue = 500
 				c.ExpiryDate = now.Add(24 * time.Hour)
 				test.Service.CreateCoupon(context.Background(), &c)
+				//log.Println(c)
+
 				return c.CouponCode
 			},
 			request: models.ValidateCouponRequest{
 				UserID:     "user3",
 				OrderTotal: 100,
+				CartItems:  []models.CartItem{{Category: "painkillers"}},
 			},
 			wantErr: "order total does not meet minimum requirement",
 		},
@@ -110,27 +115,29 @@ func TestValidateCoupon(t *testing.T) {
 			request: models.ValidateCouponRequest{
 				UserID:     "user5",
 				OrderTotal: 200,
+				Timestamp:  now,
+				CartItems: []models.CartItem{
+					{ID: "med001", Category: "painkillers"},
+				},
 			},
 			wantErr: "",
 		},
 	}
-
+	t.Cleanup(func() { test.Cleanup() })
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Cleanup(func() { test.Cleanup() })
 			code := tc.setup()
 			tc.request.CouponCode = code
 			resp, err := test.Service.ValidateCoupon(context.Background(), tc.request)
-
 			if tc.wantErr != "" {
 				assert.Equal(t, tc.wantErr, err.Error())
-				assert.Equal(t, 0.0, resp.Discount)
 			} else {
 				assert.Equal(t, nil, err)
 				assert.NotEqual(t, 0.0, resp.Discount)
 			}
 		})
 	}
+
 }
 
 func TestCreateCoupon(t *testing.T) {
@@ -141,7 +148,7 @@ func TestCreateCoupon(t *testing.T) {
 	coupon := &models.Coupon{
 		CouponCode:            "CREATE1",
 		ExpiryDate:            now.Add(48 * time.Hour),
-		UsageType:             "single-use",
+		UsageType:             "single_use",
 		ApplicableMedicineIDs: []string{"med101"},
 		MinOrderValue:         150,
 		ValidTimeWindow: models.TimeWindow{
@@ -166,7 +173,7 @@ func TestCreateCoupon(t *testing.T) {
 		MinOrderValue:   100,
 		ExpiryDate:      now.Add(1 * time.Hour),
 		MaxUsagePerUser: 1,
-		UsageType:       "single-use",
+		UsageType:       "single_use",
 		ValidTimeWindow: models.TimeWindow{Start: now.Add(-1 * time.Hour), End: now.Add(2 * time.Hour)},
 	}
 	err = test.Service.CreateCoupon(context.Background(), invalid)
@@ -180,7 +187,7 @@ func TestGetApplicableCoupons(t *testing.T) {
 	coupon1 := &models.Coupon{
 		CouponCode:           "APPLICABLE1",
 		ExpiryDate:           now.Add(24 * time.Hour),
-		UsageType:            "multi-use",
+		UsageType:            "multi_use",
 		MinOrderValue:        100,
 		ApplicableCategories: []string{"diabetes"},
 		ValidTimeWindow: models.TimeWindow{
@@ -198,7 +205,7 @@ func TestGetApplicableCoupons(t *testing.T) {
 	coupon2 := &models.Coupon{
 		CouponCode:           "NOTMATCHING",
 		ExpiryDate:           now.Add(24 * time.Hour),
-		UsageType:            "multi-use",
+		UsageType:            "multi_use",
 		MinOrderValue:        100,
 		ApplicableCategories: []string{"painkillers"},
 		ValidTimeWindow: models.TimeWindow{

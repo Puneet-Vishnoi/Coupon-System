@@ -25,24 +25,34 @@ func (r *CouponRepository) CreateCoupon(ctx context.Context, c *models.Coupon) e
 		return fmt.Errorf("failed to marshal medicine IDs: %w", err)
 	}
 
+	if c.DiscountValue<0{
+		return fmt.Errorf("discount cant be negetive")
+
+	}
+
 	cats, err := json.Marshal(c.ApplicableCategories)
 	if err != nil {
 		return fmt.Errorf("failed to marshal categories: %w", err)
 	}
 
 	_, err = r.DBHelper.PostgresClient.ExecContext(ctx, `
-		INSERT INTO coupons (
-			coupon_code,
-			discount_type,
-			discount_value,
-			discount_target,
-			min_order_value,
-			max_usage_per_user,
-			expiry_date,
-			applicable_medicine_ids,
-			applicable_categories
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`,
+	INSERT INTO coupons (
+		coupon_code,
+		discount_type,
+		discount_value,
+		discount_target,
+		min_order_value,
+		max_usage_per_user,
+		expiry_date,
+		applicable_medicine_ids,
+		applicable_categories,
+		usage_type,
+		valid_start,
+		valid_end,
+		terms_and_conditions,
+		max_discount_amount
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+`,
 		c.CouponCode,
 		c.DiscountType,
 		c.DiscountValue,
@@ -52,6 +62,11 @@ func (r *CouponRepository) CreateCoupon(ctx context.Context, c *models.Coupon) e
 		c.ExpiryDate,
 		meds,
 		cats,
+		c.UsageType,
+		c.ValidTimeWindow.Start,
+		c.ValidTimeWindow.End,
+		c.TermsAndConditions,
+		c.MaxDiscountAmount,
 	)
 
 	if err != nil {
@@ -140,12 +155,15 @@ func (r *CouponRepository) GetCouponByCode(ctx context.Context, code string) (mo
 
 func (r *CouponRepository) GetUserUsageCount(ctx context.Context, tx *sql.Tx, userID, couponCode string) (int, error) {
 	var count int
+	// Removed FOR UPDATE as it's unnecessary for COUNT
 	err := tx.QueryRowContext(ctx, `
         SELECT COUNT(*) FROM coupon_usages
         WHERE user_id = $1 AND coupon_code = $2
-        FOR UPDATE
     `, userID, couponCode).Scan(&count)
-	return count, err
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (r *CouponRepository) RecordUsage(ctx context.Context, tx *sql.Tx, userID, couponCode string, usedAt time.Time) error {
