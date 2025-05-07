@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -132,17 +133,18 @@ func (r *CouponRepository) GetCouponByCode(ctx context.Context, code string) (mo
 	return c, nil
 }
 
-func (r *CouponRepository) GetUserUsageCount(ctx context.Context, userID, couponCode string) (int, error) {
+func (r *CouponRepository) GetUserUsageCount(ctx context.Context,  tx *sql.Tx, userID, couponCode string) (int, error) {
 	var count int
-	err := r.DBHelper.PostgresClient.QueryRowContext(ctx, `
+	err := tx.QueryRowContext(ctx, `
         SELECT COUNT(*) FROM coupon_usages
         WHERE user_id = $1 AND coupon_code = $2
+        FOR UPDATE
     `, userID, couponCode).Scan(&count)
 	return count, err
 }
 
-func (r *CouponRepository) RecordUsage(ctx context.Context, userID, couponCode string, usedAt time.Time) error {
-	_, err := r.DBHelper.PostgresClient.ExecContext(ctx, `
+func (r *CouponRepository) RecordUsage(ctx context.Context, tx *sql.Tx, userID, couponCode string, usedAt time.Time) error {
+	_, err := tx.ExecContext(ctx, `
         INSERT INTO coupon_usages (user_id, coupon_code, used_at)
         VALUES ($1, $2, $3)
     `, userID, couponCode, usedAt)

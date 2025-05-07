@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"time"
 
 	redisProvider "github.com/Puneet-Vishnoi/Coupon-System/cache/redis/providers"
 	"github.com/Puneet-Vishnoi/Coupon-System/models"
@@ -11,16 +12,16 @@ import (
 )
 
 type CouponService struct {
-	Repo *repository.CouponRepository
+	Repo        *repository.CouponRepository
+	RedisHelper *redisProvider.RedisHelper
 }
 
 func NewCouponService(repo *repository.CouponRepository, redis *redisProvider.RedisHelper) *CouponService {
-	return &CouponService{Repo: repo}
+	return &CouponService{Repo: repo, RedisHelper: redis}
 }
 
 func (s *CouponService) CreateCoupon(ctx context.Context, coupon *models.Coupon) error {
-	log.Println(coupon, "kkkkk")
-	return s.Repo.CreateCoupon(ctx, coupon) 
+	return s.Repo.CreateCoupon(ctx, coupon)
 }
 
 func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.ApplicableCouponsRequest) ([]models.Coupon, error) {
@@ -28,15 +29,9 @@ func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.App
 	if err != nil {
 		return nil, err
 	}
-	log.Println(allCoupons, "all")
-	log.Println(req, "req")
-
 
 	var applicable []models.Coupon
 	for _, c := range allCoupons {
-		log.Println(c.ApplicableCategories, "acata")
-		log.Println(c.ApplicableMedicineIDs, "amedi")
-
 		if req.OrderTotal < c.MinOrderValue {
 			continue
 		}
@@ -45,8 +40,6 @@ func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.App
 			applicable = append(applicable, c)
 			continue
 		}
-
-		
 
 		for _, item := range req.CartItems {
 			log.Println(item)
@@ -62,16 +55,27 @@ func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.App
 }
 
 func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateCouponRequest) (models.ValidateCouponResponse, error) {
-	coupon, err := s.Repo.GetCouponByCode(ctx, req.CouponCode)
+	tx, err := s.Repo.DBHelper.PostgresClient.BeginTx(ctx, nil)
 	if err != nil {
-		return models.ValidateCouponResponse{}, errors.New("coupon not found")
+		return models.ValidateCouponResponse{}, errors.New("failed to start transaction")
+	}
+	defer tx.Rollback()
+
+	// coupon, err := s.Repo.GetCouponByCode(ctx, req.CouponCode)
+	// if err != nil {
+	// 	return models.ValidateCouponResponse{}, errors.New("coupon not found")
+	// }
+
+	coupon, err := s.fetchCouponFromCacheOrDB(ctx, req.CouponCode)
+	if err != nil {
+		return models.ValidateCouponResponse{}, err
 	}
 
 	if req.Timestamp.After(coupon.ExpiryDate) {
 		return models.ValidateCouponResponse{}, errors.New("coupon expired")
 	}
 
-	usageCount, err := s.Repo.GetUserUsageCount(ctx, req.UserID, req.CouponCode)
+	usageCount, err := s.Repo.GetUserUsageCount(ctx, tx, req.UserID, req.CouponCode)
 	if err != nil {
 		return models.ValidateCouponResponse{}, err
 	}
@@ -96,13 +100,43 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 
 	discount := calculateDiscount(coupon, req.OrderTotal)
 
-	_ = s.Repo.RecordUsage(ctx, req.UserID, coupon.CouponCode, req.Timestamp)
+	err = s.Repo.RecordUsage(ctx, tx, req.UserID, coupon.CouponCode, req.Timestamp)
+	if err != nil {
+		return models.ValidateCouponResponse{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return models.ValidateCouponResponse{}, errors.New("failed to commit transaction")
+	}
 
 	return models.ValidateCouponResponse{
 		IsValid:  true,
 		Discount: discount,
 		Message:  "coupon applied successfully",
 	}, nil
+}
+
+func (s *CouponService) fetchCouponFromCacheOrDB(ctx context.Context, couponCode string) (models.Coupon, error) {
+	var coupon models.Coupon
+	cacheHit, err := s.RedisHelper.GetJSON(ctx, couponCode, &coupon)
+	if err != nil {
+		return models.Coupon{}, err
+	}
+
+	if !cacheHit {
+		coupon, err = s.Repo.GetCouponByCode(ctx, couponCode)
+		if err != nil {
+			return models.Coupon{}, errors.New("coupon not found")
+		}
+
+		// Cache it in Redis
+		ttl := time.Until(coupon.ExpiryDate)
+		err = s.RedisHelper.SetJSON(ctx, couponCode, coupon, ttl)
+		if err != nil {
+			log.Printf("failed to cache coupon: %v", err)
+		}
+	}
+	return coupon, nil
 }
 
 // Helper
