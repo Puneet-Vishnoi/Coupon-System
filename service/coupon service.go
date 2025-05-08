@@ -21,6 +21,12 @@ func NewCouponService(repo *repository.CouponRepository, redis *redisProvider.Re
 }
 
 func (s *CouponService) CreateCoupon(ctx context.Context, coupon *models.Coupon) error {
+
+	c, _ := s.Repo.GetCouponByCode(ctx, coupon.CouponCode)
+
+	if c.CouponCode == coupon.CouponCode {
+		return errors.New("coupon already found")
+	}
 	return s.Repo.CreateCoupon(ctx, coupon)
 }
 
@@ -71,7 +77,7 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 		return models.ValidateCouponResponse{}, err
 	}
 
-	log.Println(coupon, "cpn", 	req.Timestamp.Before(coupon.ValidTimeWindow.Start) || req.Timestamp.After(coupon.ValidTimeWindow.End))
+	log.Println(coupon, "cpn", req.Timestamp.Before(coupon.ValidTimeWindow.Start) || req.Timestamp.After(coupon.ValidTimeWindow.End))
 
 	// Check if the coupon is expired
 	if req.Timestamp.After(coupon.ExpiryDate) {
@@ -92,8 +98,7 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 		return models.ValidateCouponResponse{}, errors.New("usage limit reached")
 	}
 
-	log.Println(req.OrderTotal , coupon.MinOrderValue, req.OrderTotal < coupon.MinOrderValue, coupon, "//xzmmxclc")
-
+	log.Println(req.OrderTotal, coupon.MinOrderValue, req.OrderTotal < coupon.MinOrderValue, coupon, "//xzmmxclc")
 
 	// Validate if the coupon is applicable for the cart items (medicine/category check)
 	applicable := false
@@ -106,7 +111,7 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 	if !applicable {
 		return models.ValidateCouponResponse{}, errors.New("coupon not applicable to cart items")
 	}
-	log.Println(req.OrderTotal , coupon.MinOrderValue, req.OrderTotal < coupon.MinOrderValue)
+	log.Println(req.OrderTotal, coupon.MinOrderValue, req.OrderTotal < coupon.MinOrderValue)
 	// Validate that the order total meets the minimum order value
 	if req.OrderTotal < coupon.MinOrderValue {
 		return models.ValidateCouponResponse{}, errors.New("order total does not meet minimum requirement")
@@ -133,7 +138,6 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 		Message:  "coupon applied successfully",
 	}, nil
 }
-
 
 func (s *CouponService) fetchCouponFromCacheOrDB(ctx context.Context, couponCode string) (models.Coupon, error) {
 	var coupon models.Coupon

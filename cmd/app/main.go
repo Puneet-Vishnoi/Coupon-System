@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -50,8 +51,11 @@ func main() {
 	routes.RegisterRoutes(router, couponSrv)
 
 	// 6. Run REST API
-	port := ":8080"
-	fmt.Printf("Coupon REST API running on %s\n", port)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" 
+	}
+		fmt.Printf("Coupon REST API running on %s\n", port)
 	if err := router.Run(port); err != nil {
 		log.Fatalf("Failed to start Gin server: %v", err)
 	}

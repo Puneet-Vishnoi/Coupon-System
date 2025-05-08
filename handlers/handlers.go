@@ -26,14 +26,10 @@ func (h *CouponHandler) CreateCoupon(c *gin.Context) {
 		return
 	}
 
-	log.Println(req, "asdfghjkl")
-
 	if err := h.Service.CreateCoupon(c.Request.Context(), &req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	log.Println(req, "here")
 
 
 	c.JSON(http.StatusCreated, gin.H{"message": "Coupon created successfully"})
