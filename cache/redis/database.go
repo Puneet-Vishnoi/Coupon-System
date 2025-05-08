@@ -3,9 +3,10 @@ package redis
 import (
 	"context"
 	"log"
+	"os"
+	"strconv"
 	"time"
 
-	constant "github.com/Puneet-Vishnoi/Coupon-System/models/constants"
 	"github.com/go-redis/redis/v8"
 )
 
@@ -16,15 +17,18 @@ type RedisDb struct {
 func ConnectRedis() *RedisDb {
 	ctx := context.Background()
 
+	addr := os.Getenv("REDIS_ADDR")
+	password := os.Getenv("REDIS_PASSWORD")
+	dbIndex, _ := strconv.Atoi(os.Getenv("REDIS_DB"))
+
 	var redisClient *redis.Client
 	var err error
 
-	// Retry logic for Redis connection
-	for i := 0; i < constant.MAX_DB_ATTEMPTS; i++ {
+	for i := 0; i < 5; i++ {
 		redisClient = redis.NewClient(&redis.Options{
-			Addr:     constant.RedisAddr,
-			Password: constant.RedisPassword,
-			DB:       constant.RedisDB,
+			Addr:     addr,
+			Password: password,
+			DB:       dbIndex,
 		})
 
 		err = redisClient.Ping(ctx).Err()
@@ -39,11 +43,12 @@ func ConnectRedis() *RedisDb {
 	if err == nil {
 		log.Print("Redis connected successfully")
 		return &RedisDb{RedisClient: redisClient}
-	} else {
-		log.Print("Failed to connect to Redis after maximum attempts")
-		return &RedisDb{}
 	}
+
+	log.Print("Failed to connect to Redis after multiple attempts")
+	return &RedisDb{}
 }
+
 
 func (db *RedisDb) Stop() {
 	if db.RedisClient == nil {

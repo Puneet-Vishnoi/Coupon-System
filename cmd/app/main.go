@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 
 	"github.com/Puneet-Vishnoi/Coupon-System/cache/redis"
 	redisProvider "github.com/Puneet-Vishnoi/Coupon-System/cache/redis/providers"
@@ -16,6 +17,11 @@ import (
 )
 
 func main() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal("Failed to load env file: ", err)
+	}
+
 	// 1. Connect Redis
 	redisClient := redis.ConnectRedis()
 	redisHelper := redisProvider.NewRedisProvider(redisClient.RedisClient)

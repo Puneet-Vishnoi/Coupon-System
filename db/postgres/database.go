@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
@@ -14,27 +15,26 @@ type Db struct {
 
 // ConnectDB establishes a connection to the PostgreSQL database
 func ConnectDB() *Db {
-	connStr := "host=localhost port=5432 user=postgres password=Puneet dbname=coupon-system sslmode=disable"
+	connStr := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		os.Getenv("POSTGRES_HOST"),
+		os.Getenv("POSTGRES_PORT"),
+		os.Getenv("POSTGRES_USER"),
+		os.Getenv("POSTGRES_PASSWORD"),
+		os.Getenv("POSTGRES_DB"),
+	)
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatalf("Failed to open database connection: %v", err)
 	}
 
-	err = db.Ping()
-	if err != nil {
-		log.Fatalf("Failed to connect to PostgreSQL database: %v", err)
+	if err = db.Ping(); err != nil {
+		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
-
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(0)
 
 	fmt.Println("Connected to PostgreSQL database successfully!")
-
-	return &Db{
-		PostgresClient: db,
-	}
+	return &Db{PostgresClient: db}
 }
 
 // Stop gracefully closes the PostgreSQL connection
