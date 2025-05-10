@@ -83,15 +83,38 @@ go mod tidy
 Create a `.env` file in the root directory and add the following environment variables:
 
 ```
-MONGO_URI=mongodb://localhost:27017/coupon-system
+# Application
 PORT=8080
-REDIS_ADDR=redis:6379
-POSTGRES_USER="user name"
-POSTGRES_PASSWORD="Your password"
+APP_ENV=development
+
+# PostgreSQL (Main)
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=Puneet
 POSTGRES_DB=coupon-system
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
-POSTGRES_DSN=postgres://postgres:User@postgres:5432/coupon-system?sslmode=disable
+POSTGRES_DSN=postgres://postgres:Puneet@postgres:5432/coupon-system?sslmode=disable
+
+# PostgreSQL (Test DB)
+TEST_POSTGRES_USER=test_user
+TEST_POSTGRES_PASSWORD=test_pass
+TEST_POSTGRES_DB=coupon-test-db
+TEST_POSTGRES_HOST=test-postgres
+TEST_POSTGRES_PORT=5432
+TEST_POSTGRES_DSN=postgres://test_user:test_pass@test-postgres:5432/coupon-test-db?sslmode=disable
+
+# Redis
+REDIS_ADDR=coupon-redis:6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# Redis (Test DB)
+TEST_REDIS_ADDR=coupon-test-redis:6379
+TEST_REDIS_PASSWORD=
+TEST_REDIS_DB=1
+
+# Retry attempts for DB/Redis
+MAX_DB_ATTEMPTS=5
 ```
 
 ### 4. Run the Application with Docker
