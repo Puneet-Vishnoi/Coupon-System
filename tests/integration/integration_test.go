@@ -43,9 +43,8 @@ func TestCouponIntegration(t *testing.T) {
 		t.Fatalf("failed to marshal coupon: %v", err)
 	}
 
-	resp, err := http.Post("http://localhost:8080/api/coupons", "application/json", bytes.NewBuffer(couponJSON))
+	resp, err := http.Post("http://app:8080/api/coupons", "application/json", bytes.NewBuffer(couponJSON))
 	if err != nil || resp.StatusCode != http.StatusCreated {
-		log.Println(err, resp, "//nmnm")
 		t.Fatalf("failed to create coupon: %v", err)
 	}
 	defer resp.Body.Close()
@@ -67,9 +66,8 @@ func TestCouponIntegration(t *testing.T) {
 		t.Fatalf("failed to marshal applicable request: %v", err)
 	}
 
-	resp, err = http.Post("http://localhost:8080/api/coupons/applicable", "application/json", bytes.NewBuffer(applicableJSON))
+	resp, err = http.Post("http://app:8080/api/coupons/applicable", "application/json", bytes.NewBuffer(applicableJSON))
 	if err != nil || resp.StatusCode != http.StatusOK {
-		log.Println(resp, err)
 		t.Fatalf("failed to check if coupon is applicable: %v", err)
 	}
 	defer resp.Body.Close()
@@ -88,7 +86,7 @@ func TestCouponIntegration(t *testing.T) {
 		t.Fatalf("failed to marshal validate request: %v", err)
 	}
 
-	resp, err = http.Post("http://localhost:8080/api/coupons/validate", "application/json", bytes.NewBuffer(validateJSON))
+	resp, err = http.Post("http://app:8080/api/coupons/validate", "application/json", bytes.NewBuffer(validateJSON))
 	if err != nil || resp.StatusCode != http.StatusOK {
 		log.Println(resp, err)
 		t.Fatalf("failed to validate coupon: %v", err)
@@ -100,8 +98,6 @@ func TestCouponIntegration(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-
-	log.Println(result)
 
 	assert.Equal(t, result.IsValid, true)
 	assert.Equal(t, result.Discount["total_order_value"], 24.1)

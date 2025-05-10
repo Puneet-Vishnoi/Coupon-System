@@ -56,7 +56,7 @@ func main() {
 		port = "8080" 
 	}
 		fmt.Printf("Coupon REST API running on %s\n", port)
-	if err := router.Run(port); err != nil {
+	if err := router.Run(":" + port); err != nil {
 		log.Fatalf("Failed to start Gin server: %v", err)
 	}
 }

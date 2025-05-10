@@ -2,7 +2,7 @@
 FROM golang:1.23
 
 # Set working directory
-WORKDIR /app
+WORKDIR /coupon-system
 
 # Download dependencies early
 COPY go.mod go.sum ./
