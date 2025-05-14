@@ -119,7 +119,7 @@ func (r *CouponRepository) GetAllCoupons(ctx context.Context) ([]*models.Coupon,
 	return coupons, nil
 }
 
-func (r *CouponRepository) GetCouponByCode(ctx context.Context, code string) (models.Coupon, error) {
+func (r *CouponRepository) GetCouponByCode(ctx context.Context, tx *sql.Tx, code string) (models.Coupon, error) {
 	var c models.Coupon
 	var meds, cats []byte
 
@@ -132,6 +132,7 @@ func (r *CouponRepository) GetCouponByCode(ctx context.Context, code string) (mo
             max_usage_per_user, discount_target, max_discount_amount
         FROM coupons
         WHERE coupon_code = $1
+				For UPDATE
     `, code).Scan(
 		&c.CouponCode, &c.ExpiryDate, &c.UsageType,
 		&meds, &cats,

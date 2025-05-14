@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -53,10 +58,41 @@ func main() {
 	// 6. Run REST API
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" 
+		port = "8080"
 	}
+
+	addr := ":" + port
+
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: router,
+	}
+
+	//7. run server in GO rutine so main thread become non blocking
+	go func(){
 		fmt.Printf("Coupon REST API running on %s\n", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("Failed to start Gin server: %v", err)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start Gin server: %v", err)
+		}
+	}()
+
+	// 8. wait for OS Signal to shutdown gracefully
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-quit
+	log.Printf("Received signal %s. Hence Gracefully Shutdown.", sig)
+
+	//9.1 gracefully shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil{
+		log.Fatalf("Server forced to shutdown: %v", err)
 	}
+
+	//9.2 cleanup
+	postgresClient.Stop()
+	redisClient.Stop()
+
+	log.Panicln("gracefully shutdown")
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 	"time"
@@ -21,12 +22,24 @@ func NewCouponService(repo *repository.CouponRepository, redis *redisProvider.Re
 }
 
 func (s *CouponService) CreateCoupon(ctx context.Context, coupon *models.Coupon) error {
+	tx, err := s.Repo.DBHelper.PostgresClient.BeginTx(ctx, nil)
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
 
-	c, _ := s.Repo.GetCouponByCode(ctx, coupon.CouponCode)
+	c, _ := s.Repo.GetCouponByCode(ctx, tx, coupon.CouponCode)
 
 	if c.CouponCode == coupon.CouponCode {
 		return errors.New("coupon already found")
 	}
+
+	// Commit the transaction
+	if err := tx.Commit(); err != nil {
+		return errors.New("failed to commit transaction")
+	}
+
 	return s.Repo.CreateCoupon(ctx, coupon)
 }
 
@@ -72,12 +85,10 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 		}
 	}()
 	// Fetch the coupon from cache or DB
-	coupon, err := s.fetchCouponFromCacheOrDB(ctx, req.CouponCode)
+	coupon, err := s.fetchCouponFromCacheOrDB(ctx, tx, req.CouponCode)
 	if err != nil {
 		return models.ValidateCouponResponse{}, err
 	}
-
-	log.Println(coupon, "cpn", req.Timestamp.Before(coupon.ValidTimeWindow.Start) || req.Timestamp.After(coupon.ValidTimeWindow.End))
 
 	// Check if the coupon is expired
 	if req.Timestamp.After(coupon.ExpiryDate) {
@@ -98,8 +109,6 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 		return models.ValidateCouponResponse{}, errors.New("usage limit reached")
 	}
 
-	log.Println(req.OrderTotal, coupon.MinOrderValue, req.OrderTotal < coupon.MinOrderValue, coupon, "//xzmmxclc")
-
 	// Validate if the coupon is applicable for the cart items (medicine/category check)
 	applicable := false
 	for _, item := range req.CartItems {
@@ -111,7 +120,6 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 	if !applicable {
 		return models.ValidateCouponResponse{}, errors.New("coupon not applicable to cart items")
 	}
-	log.Println(req.OrderTotal, coupon.MinOrderValue, req.OrderTotal < coupon.MinOrderValue)
 	// Validate that the order total meets the minimum order value
 	if req.OrderTotal < coupon.MinOrderValue {
 		return models.ValidateCouponResponse{}, errors.New("order total does not meet minimum requirement")
@@ -139,7 +147,7 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 	}, nil
 }
 
-func (s *CouponService) fetchCouponFromCacheOrDB(ctx context.Context, couponCode string) (models.Coupon, error) {
+func (s *CouponService) fetchCouponFromCacheOrDB(ctx context.Context, tx *sql.Tx, couponCode string) (models.Coupon, error) {
 	var coupon models.Coupon
 	cacheHit, err := s.RedisHelper.GetJSON(ctx, couponCode, &coupon)
 	if err != nil {
@@ -147,7 +155,7 @@ func (s *CouponService) fetchCouponFromCacheOrDB(ctx context.Context, couponCode
 	}
 
 	if !cacheHit {
-		coupon, err = s.Repo.GetCouponByCode(ctx, couponCode)
+		coupon, err = s.Repo.GetCouponByCode(ctx, tx, couponCode)
 		if err != nil {
 			return models.Coupon{}, errors.New("coupon not found")
 		}
