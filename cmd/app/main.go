@@ -31,6 +31,7 @@ func main() {
 	// 1. Connect Redis
 	redisClient := redis.ConnectRedis()
 	redisHelper := redisProvider.NewRedisProvider(redisClient.RedisClient)
+	defer redisClient.Stop()
 
 	// 2. Connect PostgreSQL
 	postgresClient := postgres.ConnectDB()
@@ -89,10 +90,6 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil{
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
-
-	//9.2 cleanup
-	postgresClient.Stop()
-	redisClient.Stop()
 
 	log.Panicln("gracefully shutdown")
 }

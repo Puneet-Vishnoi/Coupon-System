@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
+	_ "github.com/lib/pq"
 )
 
 type Db struct {
@@ -50,40 +51,67 @@ func (db *Db) Stop() {
 }
 
 // InitSchema creates the necessary tables in the PostgreSQL database
+// func (db *Db) InitSchema() error {
+// 	schema := fmt.Sprintf(`
+// 	CREATE TYPE usage_type AS ENUM ('%s', '%s');
+// 	CREATE TYPE discount_type AS ENUM ('%s', '%s');
+// 	CREATE TYPE discount_target AS ENUM ('%s', '%s', '%s');
+
+// 	CREATE TABLE IF NOT EXISTS coupons (
+// 		coupon_code TEXT PRIMARY KEY,
+// 		expiry_date TIMESTAMPTZ NOT NULL,
+// 		usage_type usage_type NOT NULL DEFAULT '%s',
+// 		applicable_medicine_ids JSONB NOT NULL DEFAULT '[]',
+// 		applicable_categories JSONB NOT NULL DEFAULT '[]',
+// 		min_order_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+// 		valid_start TIMESTAMPTZ NOT NULL,
+// 		valid_end TIMESTAMPTZ NOT NULL,
+// 		terms_and_conditions TEXT NOT NULL DEFAULT '',
+// 		discount_type discount_type NOT NULL DEFAULT '%s',
+// 		discount_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+// 		max_usage_per_user INTEGER NOT NULL DEFAULT 1,
+// 		discount_target discount_target NOT NULL DEFAULT '%s',
+// 		max_discount_amount DOUBLE PRECISION NOT NULL DEFAULT 0
+// 	);
+
+// 	CREATE TABLE IF NOT EXISTS coupon_usages (
+// 		id SERIAL PRIMARY KEY,
+// 		user_id TEXT NOT NULL,
+// 		coupon_code TEXT NOT NULL REFERENCES coupons(coupon_code) ON DELETE CASCADE,
+// 		used_at TIMESTAMPTZ DEFAULT NOW()
+// 	);`,
+// 		models.UsageTypeSingleUse,
+// 		models.UsageTypeMultiUse,
+// 		models.DiscountTypeFlat,
+// 		models.DiscountTypePercentage,
+// 		models.DiscountTargetMedicine,
+// 		models.DiscountTargetDelivery,
+// 		models.DiscountTargetOrder,
+// 		models.UsageTypeSingleUse,
+// 		models.DiscountTypeFlat,
+// 		models.DiscountTargetOrder)
+
+// 	_, err := db.PostgresClient.Exec(schema)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to create schema: %w", err)
+// 	}
+
+// 	fmt.Println("Database schema initialized successfully.")
+// 	return nil
+// }
+
 func (db *Db) InitSchema() error {
-	schema := `
-	DROP TABLE IF EXISTS coupon_usages;
-	DROP TABLE IF EXISTS coupons;
-
-	CREATE TABLE coupons (
-		coupon_code TEXT PRIMARY KEY,
-		expiry_date TIMESTAMPTZ NOT NULL,
-		usage_type TEXT NOT NULL DEFAULT 'single_use' CHECK (usage_type IN ('single_use', 'multi_use')),
-		applicable_medicine_ids JSONB NOT NULL DEFAULT '[]',
-		applicable_categories JSONB NOT NULL DEFAULT '[]',
-		min_order_value DOUBLE PRECISION NOT NULL DEFAULT 0,
-		valid_start TIMESTAMPTZ NOT NULL,
-		valid_end TIMESTAMPTZ NOT NULL,
-		terms_and_conditions TEXT NOT NULL DEFAULT '',
-		discount_type TEXT NOT NULL DEFAULT 'flat' CHECK (discount_type IN ('flat', 'percentage')),
-		discount_value DOUBLE PRECISION NOT NULL DEFAULT 0,
-		max_usage_per_user INTEGER NOT NULL DEFAULT 1,
-		discount_target TEXT NOT NULL DEFAULT 'total_order_value' CHECK (discount_target IN ('medicine', 'delivery', 'total_order_value')),
-		max_discount_amount DOUBLE PRECISION NOT NULL DEFAULT 0
-	);
-
-	CREATE TABLE coupon_usages (
-		id SERIAL PRIMARY KEY,
-		user_id TEXT NOT NULL,
-		coupon_code TEXT NOT NULL REFERENCES coupons(coupon_code) ON DELETE CASCADE,
-		used_at TIMESTAMPTZ DEFAULT NOW()
-	);`
-
-	_, err := db.PostgresClient.Exec(schema)
+	schemaPath := filepath.Join("db", "postgres", "coupon.sql")
+	content, err := os.ReadFile(schemaPath)
 	if err != nil {
-		return fmt.Errorf("failed to create schema: %w", err)
+		return fmt.Errorf("failed to read schema file: %w", err)
 	}
 
-	fmt.Println("Database schema initialized successfully.")
+	_, err = db.PostgresClient.Exec(string(content))
+	if err != nil {
+		return fmt.Errorf("failed to execute schema: %w", err)
+	}
+
+	fmt.Println("Database schema initialized successfully from file.")
 	return nil
 }

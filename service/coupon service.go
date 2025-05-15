@@ -23,24 +23,27 @@ func NewCouponService(repo *repository.CouponRepository, redis *redisProvider.Re
 
 func (s *CouponService) CreateCoupon(ctx context.Context, coupon *models.Coupon) error {
 	tx, err := s.Repo.DBHelper.PostgresClient.BeginTx(ctx, nil)
+
 	defer func() {
 		if err != nil {
 			tx.Rollback()
 		}
 	}()
 
-	c, _ := s.Repo.GetCouponByCode(ctx, tx, coupon.CouponCode)
-
-	if c.CouponCode == coupon.CouponCode {
-		return errors.New("coupon already found")
+	c, err := s.Repo.GetCouponByCode(ctx, tx, coupon.CouponCode)
+	if err == nil && c.CouponCode == coupon.CouponCode {
+		return errors.New("coupon already exists")
+	}
+	if err != nil && err != sql.ErrNoRows {
+		return err
 	}
 
-	// Commit the transaction
-	if err := tx.Commit(); err != nil {
-		return errors.New("failed to commit transaction")
+	err = s.Repo.CreateCoupon(ctx, coupon)
+	if err != nil {
+		return err
 	}
 
-	return s.Repo.CreateCoupon(ctx, coupon)
+	return tx.Commit()
 }
 
 func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.ApplicableCouponsRequest) ([]models.Coupon, error) {
@@ -182,11 +185,12 @@ func contains(slice []string, target string) bool {
 
 func calculateDiscount(coupon models.Coupon, orderTotal float64) map[string]float64 {
 	discount := make(map[string]float64)
-	if coupon.DiscountType == "flat" {
-		discount[coupon.DiscountTarget] = coupon.DiscountValue
-	} else if coupon.DiscountType == "percentage" {
+	if coupon.DiscountType == models.DiscountTypeFlat {
+		discount[string(coupon.DiscountTarget)] = coupon.DiscountValue
+	} else if coupon.DiscountType == models.DiscountTypePercentage {
+
 		discountAmount := (orderTotal * coupon.DiscountValue) / 100
-		discount[coupon.DiscountTarget] = discountAmount
+		discount[string(coupon.DiscountTarget)] = discountAmount
 	}
 	return discount
 }
