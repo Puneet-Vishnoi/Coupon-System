@@ -91,5 +91,5 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	log.Panicln("gracefully shutdown")
+	log.Println("gracefully shutdown")
 }
