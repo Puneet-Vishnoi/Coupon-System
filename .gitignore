@@ -24,3 +24,6 @@ docker-compose.override.yml
 
 # Cache files
 /cache/
+
+# Postgres data volume
+/pgdata

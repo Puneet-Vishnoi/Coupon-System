@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -25,17 +27,33 @@ func ConnectDB() *Db {
 		os.Getenv("POSTGRES_DB"),
 	)
 
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatalf("Failed to open database connection: %v", err)
+	var db *sql.DB
+	var err error
+	maxRetries, _ := strconv.Atoi(os.Getenv("MAX_DB_ATTEMPTS"))
+	if maxRetries == 0 {
+		maxRetries = 10
 	}
 
-	if err = db.Ping(); err != nil {
-		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
+	for i := 0; i < maxRetries; i++ {
+		db, err = sql.Open("postgres", connStr)
+		if err != nil {
+			log.Printf("Attempt %d: failed to open database connection: %v", i+1, err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		err = db.Ping()
+		if err == nil {
+			fmt.Println("Connected to PostgreSQL database successfully!")
+			return &Db{PostgresClient: db}
+		}
+
+		log.Printf("Attempt %d: failed to ping PostgreSQL: %v", i+1, err)
+		time.Sleep(2 * time.Second)
 	}
 
-	fmt.Println("Connected to PostgreSQL database successfully!")
-	return &Db{PostgresClient: db}
+	log.Fatalf("Exceeded max retries. Could not connect to PostgreSQL: %v", err)
+	return nil
 }
 
 // Stop gracefully closes the PostgreSQL connection

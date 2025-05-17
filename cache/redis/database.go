@@ -20,11 +20,12 @@ func ConnectRedis() *RedisDb {
 	addr := os.Getenv("REDIS_ADDR")
 	password := os.Getenv("REDIS_PASSWORD")
 	dbIndex, _ := strconv.Atoi(os.Getenv("REDIS_DB"))
+	maxRetries, _ := strconv.Atoi(os.Getenv("MAX_DB_ATTEMPTS"))
 
 	var redisClient *redis.Client
 	var err error
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < maxRetries; i++ {
 		redisClient = redis.NewClient(&redis.Options{
 			Addr:     addr,
 			Password: password,
