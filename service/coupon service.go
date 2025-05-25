@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
+	"fmt"
 	"time"
 
 	redisProvider "github.com/Puneet-Vishnoi/Coupon-System/cache/redis/providers"
@@ -21,11 +21,16 @@ func NewCouponService(repo *repository.CouponRepository, redis *redisProvider.Re
 	return &CouponService{Repo: repo, RedisHelper: redis}
 }
 
-func (s *CouponService) CreateCoupon(ctx context.Context, coupon *models.Coupon) error {
+func (s *CouponService) CreateCoupon(ctx context.Context, coupon *models.Coupon) (err error) {
 	tx, err := s.Repo.DBHelper.PostgresClient.BeginTx(ctx, nil)
-
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
 	defer func() {
-		if err != nil {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		} else if err != nil {
 			tx.Rollback()
 		}
 	}()
@@ -38,18 +43,32 @@ func (s *CouponService) CreateCoupon(ctx context.Context, coupon *models.Coupon)
 		return err
 	}
 
-	err = s.Repo.CreateCoupon(ctx, coupon)
+	err = s.Repo.CreateCoupon(ctx, tx, coupon)
 	if err != nil {
 		return err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Invalidate any cached data related to coupon list
+	s.RedisHelper.Delete(ctx, "valid_coupons")
+	return nil
 }
 
 func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.ApplicableCouponsRequest) ([]models.Coupon, error) {
-	allCoupons, err := s.Repo.GetValidCoupons(ctx, req.Timestamp)
+	var allCoupons []models.Coupon
+	cacheHit, err := s.RedisHelper.GetJSON(ctx, "valid_coupons", &allCoupons)
 	if err != nil {
 		return nil, err
+	}
+	if !cacheHit {
+		allCoupons, err = s.Repo.GetValidCoupons(ctx, req.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+		s.RedisHelper.SetJSON(ctx, "valid_coupons", allCoupons, 10*time.Minute)
 	}
 
 	var applicable []models.Coupon
@@ -64,9 +83,8 @@ func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.App
 		}
 
 		for _, item := range req.CartItems {
-			log.Println(item)
-
-			if contains(c.ApplicableMedicineIDs, item.ID) || contains(c.ApplicableCategories, item.Category) {
+			if (len(c.ApplicableMedicineIDs) > 0 && contains(c.ApplicableMedicineIDs, item.ID)) ||
+				(len(c.ApplicableCategories) > 0 && contains(c.ApplicableCategories, item.Category)) {
 				applicable = append(applicable, c)
 				break
 			}
@@ -76,43 +94,41 @@ func (s *CouponService) GetApplicableCoupons(ctx context.Context, req models.App
 	return applicable, nil
 }
 
-func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateCouponRequest) (models.ValidateCouponResponse, error) {
-	// Start a new transaction
-	tx, err := s.Repo.DBHelper.PostgresClient.BeginTx(ctx, nil)
+func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateCouponRequest) (resp models.ValidateCouponResponse, err error) {
+	tx, err := s.Repo.DBHelper.PostgresClient.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
-		return models.ValidateCouponResponse{}, errors.New("failed to start transaction")
+		return resp, errors.New("failed to start transaction")
 	}
 	defer func() {
-		if err != nil {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		} else if err != nil {
 			tx.Rollback()
 		}
 	}()
-	// Fetch the coupon from cache or DB
-	coupon, err := s.fetchCouponFromCacheOrDB(ctx, tx, req.CouponCode)
+
+	coupon, err := s.fetchCouponFromDB(ctx, tx, req.CouponCode)
 	if err != nil {
-		return models.ValidateCouponResponse{}, err
+		return resp, err
 	}
 
-	// Check if the coupon is expired
 	if req.Timestamp.After(coupon.ExpiryDate) {
-		return models.ValidateCouponResponse{}, errors.New("coupon expired")
+		return resp, errors.New("coupon expired")
 	}
 
-	// Validate the coupon's time window
 	if req.Timestamp.Before(coupon.ValidTimeWindow.Start) || req.Timestamp.After(coupon.ValidTimeWindow.End) {
-		return models.ValidateCouponResponse{}, errors.New("coupon not valid at this time")
+		return resp, errors.New("coupon not valid at this time")
 	}
 
-	// Check if the user has exceeded the usage limit
 	usageCount, err := s.Repo.GetUserUsageCount(ctx, tx, req.UserID, req.CouponCode)
 	if err != nil {
-		return models.ValidateCouponResponse{}, err
+		return resp, err
 	}
 	if usageCount >= coupon.MaxUsagePerUser {
-		return models.ValidateCouponResponse{}, errors.New("usage limit reached")
+		return resp, errors.New("usage limit reached")
 	}
 
-	// Validate if the coupon is applicable for the cart items (medicine/category check)
 	applicable := false
 	for _, item := range req.CartItems {
 		if contains(coupon.ApplicableMedicineIDs, item.ID) || contains(coupon.ApplicableCategories, item.Category) {
@@ -121,59 +137,44 @@ func (s *CouponService) ValidateCoupon(ctx context.Context, req models.ValidateC
 		}
 	}
 	if !applicable {
-		return models.ValidateCouponResponse{}, errors.New("coupon not applicable to cart items")
-	}
-	// Validate that the order total meets the minimum order value
-	if req.OrderTotal < coupon.MinOrderValue {
-		return models.ValidateCouponResponse{}, errors.New("order total does not meet minimum requirement")
+		return resp, errors.New("coupon not applicable to cart items")
 	}
 
-	// Calculate the discount
+	if req.OrderTotal < coupon.MinOrderValue {
+		return resp, errors.New("order total does not meet minimum requirement")
+	}
+
 	discount := calculateDiscount(coupon, req.OrderTotal)
 
-	// Record the coupon usage for the user
 	err = s.Repo.RecordUsage(ctx, tx, req.UserID, coupon.CouponCode, req.Timestamp)
 	if err != nil {
-		return models.ValidateCouponResponse{}, err
+		return resp, err
 	}
 
-	// Commit the transaction
 	if err := tx.Commit(); err != nil {
-		return models.ValidateCouponResponse{}, errors.New("failed to commit transaction")
+		return resp, errors.New("failed to commit transaction")
 	}
 
-	// Return the valid response with the calculated discount
-	return models.ValidateCouponResponse{
+	// Invalidate coupon cache as the usage may impact validity
+	s.RedisHelper.Delete(ctx, "valid_coupons")
+
+	resp = models.ValidateCouponResponse{
 		IsValid:  true,
 		Discount: discount,
 		Message:  "coupon applied successfully",
-	}, nil
+	}
+	return resp, nil
 }
 
-func (s *CouponService) fetchCouponFromCacheOrDB(ctx context.Context, tx *sql.Tx, couponCode string) (models.Coupon, error) {
-	var coupon models.Coupon
-	cacheHit, err := s.RedisHelper.GetJSON(ctx, couponCode, &coupon)
+func (s *CouponService) fetchCouponFromDB(ctx context.Context, tx *sql.Tx, couponCode string) (models.Coupon, error) {
+	coupon, err := s.Repo.GetCouponByCode(ctx, tx, couponCode)
 	if err != nil {
-		return models.Coupon{}, err
-	}
-
-	if !cacheHit {
-		coupon, err = s.Repo.GetCouponByCode(ctx, tx, couponCode)
-		if err != nil {
-			return models.Coupon{}, errors.New("coupon not found")
-		}
-
-		// Cache it in Redis
-		ttl := time.Until(coupon.ExpiryDate)
-		err = s.RedisHelper.SetJSON(ctx, couponCode, coupon, ttl)
-		if err != nil {
-			log.Printf("failed to cache coupon: %v", err)
-		}
+		return models.Coupon{}, errors.New("coupon not found")
 	}
 	return coupon, nil
 }
 
-// Helper
+// Helpers
 func contains(slice []string, target string) bool {
 	for _, item := range slice {
 		if item == target {
@@ -185,12 +186,23 @@ func contains(slice []string, target string) bool {
 
 func calculateDiscount(coupon models.Coupon, orderTotal float64) map[string]float64 {
 	discount := make(map[string]float64)
-	if coupon.DiscountType == models.DiscountTypeFlat {
-		discount[string(coupon.DiscountTarget)] = coupon.DiscountValue
-	} else if coupon.DiscountType == models.DiscountTypePercentage {
 
-		discountAmount := (orderTotal * coupon.DiscountValue) / 100
-		discount[string(coupon.DiscountTarget)] = discountAmount
+	switch coupon.DiscountType {
+	case models.DiscountTypeFlat:
+		discount[string(coupon.DiscountTarget)] = min(coupon.DiscountValue, coupon.MaxDiscountAmount)
+	case models.DiscountTypePercentage:
+		calculated := (orderTotal * coupon.DiscountValue) / 100
+		discount[string(coupon.DiscountTarget)] = min(calculated, coupon.MaxDiscountAmount)
 	}
 	return discount
+}
+
+func min(a, b float64) float64 {
+	if b <= 0 {
+		return a
+	}
+	if a < b {
+		return a
+	}
+	return b
 }

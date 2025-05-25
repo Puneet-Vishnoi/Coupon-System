@@ -68,6 +68,23 @@ func (db *Db) Stop() {
 	}
 }
 
+func (db *Db) InitSchema() error {
+	schemaPath := filepath.Join("db", "postgres", "coupon.sql")
+	content, err := os.ReadFile(schemaPath)
+	if err != nil {
+		return fmt.Errorf("failed to read schema file: %w", err)
+	}
+
+	_, err = db.PostgresClient.Exec(string(content))
+	if err != nil {
+		return fmt.Errorf("failed to execute schema: %w", err)
+	}
+
+	fmt.Println("Database schema initialized successfully from file.")
+	return nil
+}
+
+
 // InitSchema creates the necessary tables in the PostgreSQL database
 // func (db *Db) InitSchema() error {
 // 	schema := fmt.Sprintf(`
@@ -118,18 +135,3 @@ func (db *Db) Stop() {
 // 	return nil
 // }
 
-func (db *Db) InitSchema() error {
-	schemaPath := filepath.Join("db", "postgres", "coupon.sql")
-	content, err := os.ReadFile(schemaPath)
-	if err != nil {
-		return fmt.Errorf("failed to read schema file: %w", err)
-	}
-
-	_, err = db.PostgresClient.Exec(string(content))
-	if err != nil {
-		return fmt.Errorf("failed to execute schema: %w", err)
-	}
-
-	fmt.Println("Database schema initialized successfully from file.")
-	return nil
-}
