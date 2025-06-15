@@ -1,46 +1,73 @@
+version: '3.8'
+
 services:
   app:
-    build: .
+    build: 
+      context: .
     container_name: coupon-app
     ports:
-      - "8080:8080"
+      - "${PORT}:${PORT}"
     depends_on:
-      - postgres
-      - redis
-      - test-postgres
-      - test-redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      test-postgres:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
     networks:
       - coupon-network
     env_file:
       - .env
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT}/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   postgres:
     image: postgres:15
     container_name: coupon-postgres
     restart: always
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Puneet
-      POSTGRES_DB: coupon-system
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - ./pgdata:/var/lib/postgresql/data
     networks:
       - coupon-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   test-postgres:
     image: postgres:15
     container_name: coupon-test-postgres
     restart: always
     ports:
-      - "5433:5432"
+      - "5433:${TEST_POSTGRES_PORT}"
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: test_user
-      POSTGRES_PASSWORD: test_pass
-      POSTGRES_DB: coupon-test-db
+      POSTGRES_USER: ${TEST_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${TEST_POSTGRES_DB}
     networks:
       - coupon-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TEST_POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:8
@@ -50,6 +77,11 @@ services:
       - "6379:6379"
     networks:
       - coupon-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   test-redis:
     image: redis:8
@@ -59,6 +91,11 @@ services:
       - "6380:6379"
     networks:
       - coupon-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   coupon-network:
