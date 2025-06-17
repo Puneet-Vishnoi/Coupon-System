@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   app:
-    build: 
+    build:
       context: .
     container_name: coupon-app
     ports:
@@ -26,6 +26,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    tty: true
+    stdin_open: true
 
   postgres:
     image: postgres:15
@@ -53,8 +55,6 @@ services:
     image: postgres:15
     container_name: coupon-test-postgres
     restart: always
-    ports:
-      - "5433:${TEST_POSTGRES_PORT}"
     env_file:
       - .env
     environment:
@@ -70,7 +70,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:8
+    image: redis:7
     container_name: coupon-redis
     restart: always
     ports:
@@ -84,11 +84,9 @@ services:
       retries: 5
 
   test-redis:
-    image: redis:8
+    image: redis:7
     container_name: coupon-test-redis
     restart: always
-    ports:
-      - "6380:6379"
     networks:
       - coupon-network
     healthcheck:
