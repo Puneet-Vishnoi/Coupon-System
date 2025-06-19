@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 
 	"github.com/Puneet-Vishnoi/Coupon-System/cache/redis"
 	redisProvider "github.com/Puneet-Vishnoi/Coupon-System/cache/redis/providers"
@@ -23,10 +22,10 @@ import (
 )
 
 func main() {
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Fatal("Failed to load env file: ", err)
-	}
+	// err := godotenv.Load(".env")
+	// if err != nil {
+	// 	log.Fatal("Failed to load env file: ", err)
+	// }
 
 	// 1. Connect Redis
 	redisClient := redis.ConnectRedis()
@@ -38,7 +37,7 @@ func main() {
 	defer postgresClient.Stop()
 
 	// 2.1 Init Schema (optional — only for development)
-	if err := postgresClient.InitSchema(); err != nil {
+	if err := postgresClient.InitSchema("./db/postgres/coupon.sql"); err != nil {
 		log.Fatalf("Failed to initialize database schema: %v", err)
 	}
 
@@ -70,7 +69,7 @@ func main() {
 	}
 
 	//7. run server in GO rutine so main thread become non blocking
-	go func(){
+	go func() {
 		fmt.Printf("Coupon REST API running on %s\n", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start Gin server: %v", err)
@@ -87,7 +86,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil{
+	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 

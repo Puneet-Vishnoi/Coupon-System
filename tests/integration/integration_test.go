@@ -3,20 +3,28 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/Puneet-Vishnoi/Coupon-System/models"
+	"github.com/Puneet-Vishnoi/Coupon-System/routes"
 	"github.com/Puneet-Vishnoi/Coupon-System/tests/mockdb"
+	"github.com/gin-gonic/gin"
 	"github.com/go-playground/assert"
 )
 
 func TestCouponIntegration(t *testing.T) {
-	// Initialize the test dependencies
+	// Setup test dependencies
 	testDeps := mockdb.GetTestInstance()
 	defer testDeps.Cleanup()
+
+	// Start the test server
+	router := gin.Default()
+	routes.RegisterRoutes(router, testDeps.Service)
+	server := httptest.NewServer(router)
+	defer server.Close()
 
 	// 1. Create a coupon
 	coupon := models.Coupon{
@@ -37,66 +45,48 @@ func TestCouponIntegration(t *testing.T) {
 		DiscountTarget:     "total_order_value",
 	}
 
-	// Send POST request to create the coupon
-	couponJSON, err := json.Marshal(coupon)
-	if err != nil {
-		t.Fatalf("failed to marshal coupon: %v", err)
-	}
-
-	resp, err := http.Post("http://app:8080/api/coupons", "application/json", bytes.NewBuffer(couponJSON))
+	couponJSON, _ := json.Marshal(coupon)
+	resp, err := http.Post(server.URL+"/api/coupons", "application/json", bytes.NewBuffer(couponJSON))
 	if err != nil || resp.StatusCode != http.StatusCreated {
-		t.Fatalf("failed to create coupon: %v", err)
+		t.Fatalf("Failed to create coupon: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// 2. Check if the coupon is applicable
+	// 2. Check applicable
 	cartItems := []models.CartItem{
 		{ID: "med001", Category: "pain_relief", Price: 100.78},
 		{ID: "med004", Category: "fever", Price: 342.89},
 	}
-
-	applicableRequest := models.ApplicableCouponsRequest{
+	applicableReq := models.ApplicableCouponsRequest{
 		CartItems:  cartItems,
 		OrderTotal: 120.5,
 		Timestamp:  time.Date(2025, time.June, 1, 10, 30, 0, 0, time.UTC),
 	}
-
-	applicableJSON, err := json.Marshal(applicableRequest)
-	if err != nil {
-		t.Fatalf("failed to marshal applicable request: %v", err)
-	}
-
-	resp, err = http.Post("http://app:8080/api/coupons/applicable", "application/json", bytes.NewBuffer(applicableJSON))
+	applicableJSON, _ := json.Marshal(applicableReq)
+	resp, err = http.Post(server.URL+"/api/coupons/applicable", "application/json", bytes.NewBuffer(applicableJSON))
 	if err != nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("failed to check if coupon is applicable: %v", err)
+		t.Fatalf("Failed to check applicable coupons: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// 3. Validate the coupon for a specific user and cart
-	validateRequest := models.ValidateCouponRequest{
+	// 3. Validate the coupon
+	validateReq := models.ValidateCouponRequest{
 		UserID:     "Puneet001",
 		CouponCode: "SAVE20",
 		CartItems:  cartItems,
 		OrderTotal: 120.5,
 		Timestamp:  time.Date(2025, time.June, 1, 10, 30, 0, 0, time.UTC),
 	}
-
-	validateJSON, err := json.Marshal(validateRequest)
-	if err != nil {
-		t.Fatalf("failed to marshal validate request: %v", err)
-	}
-
-	resp, err = http.Post("http://app:8080/api/coupons/validate", "application/json", bytes.NewBuffer(validateJSON))
+	validateJSON, _ := json.Marshal(validateReq)
+	resp, err = http.Post(server.URL+"/api/coupons/validate", "application/json", bytes.NewBuffer(validateJSON))
 	if err != nil || resp.StatusCode != http.StatusOK {
-		log.Println(resp, err)
-		t.Fatalf("failed to validate coupon: %v", err)
+		t.Fatalf("Failed to validate coupon: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// 4. Verify the coupon is applied correctly (expected to be applied)
 	var result models.ValidateCouponResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
+		t.Fatalf("Failed to decode response: %v", err)
 	}
 
 	assert.Equal(t, result.IsValid, true)

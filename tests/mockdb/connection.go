@@ -9,7 +9,6 @@ import (
 	"strconv"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/joho/godotenv"
 
 	redisPkg "github.com/Puneet-Vishnoi/Coupon-System/cache/redis"
 	redisProvider "github.com/Puneet-Vishnoi/Coupon-System/cache/redis/providers"
@@ -39,7 +38,7 @@ func ConnectTestDB() *postgres.Db {
 		os.Getenv("TEST_POSTGRES_PASSWORD"),
 		os.Getenv("TEST_POSTGRES_DB"),
 	)
-	log.Println(connStr, "//;;")
+	fmt.Println(connStr, "connstr")
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatalf("Failed to open test database connection: %v", err)
@@ -87,16 +86,34 @@ func ConnectTestRedis() *redisPkg.RedisDb {
 	return &redisPkg.RedisDb{RedisClient: redisClient}
 }
 
+// func InitSchema(db *postgres.Db) error {
+
+// 	schemaPath := filepath.Join("../../", "db", "postgres", "coupon.sql")
+// 	fmt.Println(schemaPath, "scpth")
+// 	content, err := os.ReadFile(schemaPath)
+// 	if err != nil {
+// 		return fmt.Errorf("%s failed to read schema file: %w",schemaPath, err, )
+// 	}
+
+// 	_, err = db.PostgresClient.Exec(string(content))
+// 	if err != nil {
+// 		return fmt.Errorf("failed to execute schema: %w", err)
+// 	}
+
+// 	fmt.Println("Database schema initialized successfully from file.")
+// 	return nil
+// }
+
 // Returns an instance of initialized test services and clients
 func GetTestInstance() *TestDeps {
-	err := godotenv.Load("../../.env")
-	if err != nil {
-		log.Fatal("Failed to load env file: ", err)
-	}
+	// err := godotenv.Load("../../.env")
+	// if err != nil {
+	// 	log.Fatal("Failed to load env file: ", err)
+	// }
 
 	// 1. Connect to Postgres (you can point this to a dedicated test DB)
 	pgClient := ConnectTestDB()
-	err = pgClient.InitSchema()
+	err := pgClient.InitSchema("./db/postgres/coupon.sql")
 	if err != nil {
 		log.Fatalf("failed to init test schema: %v", err)
 	}

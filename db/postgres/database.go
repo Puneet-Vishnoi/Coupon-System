@@ -68,11 +68,12 @@ func (db *Db) Stop() {
 	}
 }
 
-func (db *Db) InitSchema() error {
+func (db *Db) InitSchema(schema string) error {
 	schemaPath := filepath.Join("db", "postgres", "coupon.sql")
-	content, err := os.ReadFile(schemaPath)
+	fmt.Println("Loading schema from:", schemaPath)
+	content, err := os.ReadFile(schema)
 	if err != nil {
-		return fmt.Errorf("failed to read schema file: %w", err)
+		return fmt.Errorf("failed to read schemaaa file: %w", err)
 	}
 
 	_, err = db.PostgresClient.Exec(string(content))
@@ -84,6 +85,22 @@ func (db *Db) InitSchema() error {
 	return nil
 }
 
+func (db *Db) ClearTestData() error {
+	_, err := db.PostgresClient.Exec(`
+		TRUNCATE TABLE coupons, coupon_usages RESTART IDENTITY CASCADE;
+	`)
+	return err
+}
+
+
+func getSchemaPath(relPath string) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get working directory: %w", err)
+	}
+	absPath := filepath.Join(cwd, relPath)
+	return absPath, nil
+}
 
 // InitSchema creates the necessary tables in the PostgreSQL database
 // func (db *Db) InitSchema() error {
@@ -134,4 +151,3 @@ func (db *Db) InitSchema() error {
 // 	fmt.Println("Database schema initialized successfully.")
 // 	return nil
 // }
-
